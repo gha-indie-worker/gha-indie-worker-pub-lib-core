@@ -1,0 +1,19 @@
+name: gha_indie_worker_pub_lib_core
+description: >-
+  Public client-side core for GHA Indie Worker — typed API resources, request
+  signing, cursor pagination and the onboarding state machine, with RxDart-
+  friendly stream helpers. No Flutter dependency: usable from a CLI, a server-
+  side Dart process and a Flutter app alike.
+version: 0.1.0
+repository: https://github.com/gha-indie-worker/gha-indie-worker-pub-lib-core
+publish_to: none
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  crypto: ^3.0.3
+
+dev_dependencies:
+  lints: ^4.0.0
+  test: ^1.25.0

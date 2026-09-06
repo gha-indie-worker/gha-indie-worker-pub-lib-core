@@ -1,0 +1,31 @@
+{
+  "name": "@gha-indie-worker/pub-lib-core",
+  "version": "0.1.0",
+  "description": "Public client-side core for GHA Indie Worker \u2014 typed resources, request signing, pagination and the onboarding state machine. ESM, zero runtime dependencies.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.6"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./config": "./src/config.ts",
+    "./onboarding": "./src/onboarding.ts",
+    "./pagination": "./src/pagination.ts",
+    "./resources": "./src/resources.ts",
+    "./signing": "./src/signing.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "test": "node --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gha-indie-worker/gha-indie-worker-pub-lib-core.git",
+    "directory": "typescript"
+  },
+  "sideEffects": false
+}
