@@ -1,0 +1,151 @@
+{
+  "$comment": "Field-level contract the four hand-written ports must agree on until gha-indie-worker-interfaces publishes generated/ for these resources. Checked by scripts/check-contract-parity.sh.",
+  "schemaVersion": 1,
+  "source": {
+    "repository": "gha-indie-worker/gha-indie-worker-interfaces",
+    "authorities": [
+      "contracts/typespec/main.tsp",
+      "contracts/json-schema/*.schema.json"
+    ],
+    "status": "not-yet-generated"
+  },
+  "namingConventions": {
+    "rust": "snake_case",
+    "typescript": "camelCase",
+    "dart": "camelCase",
+    "gleam": "snake_case",
+    "wire": "camelCase"
+  },
+  "resources": {
+    "Run": {
+      "fields": {
+        "id": { "type": "string", "required": true },
+        "repository": { "type": "string", "required": true },
+        "revision": {
+          "type": "string",
+          "required": true,
+          "pattern": "^[0-9a-f]{40}$",
+          "note": "the independent lane refuses branch or tag execution"
+        },
+        "workflowPath": { "type": "string", "required": true },
+        "lane": { "type": "string", "required": true, "extensibleEnum": ["arc", "independent"] },
+        "state": {
+          "type": "string",
+          "required": true,
+          "extensibleEnum": [
+            "queued",
+            "planning",
+            "dispatching",
+            "running",
+            "completed",
+            "cancelled"
+          ]
+        },
+        "conclusion": {
+          "type": "string",
+          "required": false,
+          "extensibleEnum": [
+            "success",
+            "failure",
+            "cancelled",
+            "timed_out",
+            "unsupported",
+            "skipped"
+          ]
+        },
+        "queuedAt": { "type": "string", "required": true, "format": "date-time" },
+        "startedAt": { "type": "string", "required": false, "format": "date-time" },
+        "finishedAt": { "type": "string", "required": false, "format": "date-time" },
+        "jobs": { "type": "array", "items": "Job", "required": false, "default": [] }
+      }
+    },
+    "Job": {
+      "fields": {
+        "id": { "type": "string", "required": true },
+        "name": { "type": "string", "required": true },
+        "ordinal": { "type": "integer", "required": true },
+        "profile": { "type": "string", "required": true },
+        "state": {
+          "type": "string",
+          "required": true,
+          "extensibleEnum": [
+            "pending",
+            "ready",
+            "leased",
+            "running",
+            "completed",
+            "cancelled"
+          ]
+        },
+        "conclusion": { "type": "string", "required": false },
+        "needs": { "type": "array", "items": "string", "required": false, "default": [] },
+        "logOffset": { "type": "integer", "required": false, "default": 0 }
+      }
+    },
+    "Worker": {
+      "fields": {
+        "id": { "type": "string", "required": true },
+        "name": { "type": "string", "required": true },
+        "pool": { "type": "string", "required": true },
+        "architecture": { "type": "string", "required": true, "extensibleEnum": ["arm64", "x86-64"] },
+        "operatingSystem": {
+          "type": "string",
+          "required": true,
+          "extensibleEnum": ["linux", "macos", "windows"]
+        },
+        "maxConcurrency": { "type": "integer", "required": true },
+        "activeLeases": { "type": "integer", "required": true },
+        "lastHeartbeatAt": { "type": "string", "required": false, "format": "date-time" }
+      }
+    }
+  },
+  "stateMachines": {
+    "orgOnboarding": [
+      "created",
+      "verifying_email",
+      "awaiting_billing",
+      "inviting_members",
+      "connecting_repository",
+      "first_run_pending",
+      "active",
+      "suspended"
+    ],
+    "userOnboarding": [
+      "registered",
+      "verifying_email",
+      "choosing_account_kind",
+      "joining_org",
+      "connecting_repository",
+      "first_run_pending",
+      "active",
+      "disabled"
+    ]
+  },
+  "runtimeConfigKeys": [
+    "GHA_INDIE_WORKER_API_BASE",
+    "GHA_INDIE_WORKER_WS_BASE",
+    "GHA_INDIE_WORKER_SURFACE",
+    "GHA_INDIE_WORKER_CLIENT_TIMEOUT_MS",
+    "SHARED_AUTH_BASE",
+    "SHARED_AUTH_AUDIENCE"
+  ],
+  "signing": {
+    "scheme": "GIW1",
+    "canonicalLines": [
+      "GIW1",
+      "<METHOD uppercased>",
+      "<path, no query>",
+      "<query string, or empty>",
+      "<unix seconds>",
+      "<lowercase hex sha256 of the body>"
+    ],
+    "algorithm": "HMAC-SHA256",
+    "maxSkewSeconds": 300,
+    "headers": ["x-giw-key-id", "x-giw-timestamp", "x-giw-signature"]
+  },
+  "pagination": {
+    "cursorFormat": "base64url-unpadded(v1:<sortKey>:<id>)",
+    "maxPageLimit": 100,
+    "defaultPageLimit": 25
+  }
+}

@@ -2,32 +2,85 @@
 org = "gha-indie-worker"
 name = "gha-indie-worker-pub-lib-core"
 version = "0.1.0"
-description = "Public client core for GHA Indie Worker: endpoint construction and retry policy, dependency-free"
+description = "Public client-side core for GHA Indie Worker — typed API resources, request signing, pagination and the onboarding state machine, for browser, desktop and mobile"
 license = "MIT"
-language = "rust"
-kind = "rust-lib"
+keywords = ["client", "wasm", "browser", "flutter", "gleam", "ci"]
+language = "polyglot"
+kind = "pub-lib-core"
 
 [package.repository]
 vcs = "git"
 url = "https://github.com/gha-indie-worker/gha-indie-worker-pub-lib-core"
 
 [dependencies]
+"gha-indie-worker/gha-indie-worker-interfaces" = "^0.1.0"
 
-[build]
-command = "cargo build --release"
+# One repository, four ports of one contract. `zed install` materialises only the
+# targets a consumer asks for, so a Flutter app does not pull the Rust crate and
+# a wasm island does not pull the Dart package.
+[targets.rust]
+dir = "rust"
+manifest = "Cargo.toml"
+adapter = "rust"
+entry = "src/lib.rs"
+build = "cargo build --release"
+test = "cargo test --all-targets --all-features"
+lint = "cargo fmt --all -- --check && cargo clippy --all-targets --all-features -- -D warnings"
+# wasm32 is the point of the no_std-friendly build: an island must not drag in a
+# runtime it cannot have.
+extra_targets = ["wasm32-unknown-unknown"]
 
-[scripts]
-test = "cargo test --locked --all-targets"
-lint = "cargo clippy --all-targets -- -D warnings"
+[targets.typescript]
+dir = "typescript"
+manifest = "package.json"
+adapter = "node"
+entry = "src/index.ts"
+test = "node --test \"test/**/*.test.ts\""
+lint = "tsc --noEmit"
+# Zero runtime dependencies, ESM only, no framework. Node >= 22.6 strips the
+# types, so there is no build step and nothing to keep in sync with a bundler.
+runtime_dependencies = []
+
+[targets.dart]
+dir = "dart"
+manifest = "pubspec.yaml"
+adapter = "dart"
+entry = "lib/gha_indie_worker_pub_lib_core.dart"
+test = "dart test"
+lint = "dart analyze --fatal-infos"
+
+[targets.gleam]
+dir = "gleam"
+manifest = "gleam.toml"
+adapter = "gleam"
+entry = "src/gha_indie_worker_pub_lib_core.gleam"
+test = "gleam test"
+lint = "gleam check && gleam format --check src test"
 
 [install]
 dir = ".vendor/.zed"
+adapter = "polyglot"
 
 [publish]
 include_readme = true
 tag_format = "v{version}"
-exclude = [".env", ".env.*", "target/**", "**/node_modules/**", "tmp/**", "**/*.log"]
+smoke_test = "scripts/check-contract-parity.sh"
+exclude = [
+  ".env",
+  ".env.*",
+  ".direnv/**",
+  ".zed/**",
+  ".zed-pack/**",
+  ".vendor/.zed/**",
+  "**/target/**",
+  "**/build/**",
+  "**/.dart_tool/**",
+  "**/node_modules/**",
+  "tmp/**",
+  "**/*.log",
+  ".DS_Store",
+]
 
-[targets.rust]
-dir = "."
-adapter = "rust"
+[scripts]
+test = "scripts/check-contract-parity.sh"
+parity = "scripts/check-contract-parity.sh"

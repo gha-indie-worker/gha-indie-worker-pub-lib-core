@@ -1,25 +1,150 @@
 name: ci
+
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
 permissions:
   contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  rust:
-    runs-on: ubuntu-latest
+  contract-parity:
+    name: the four ports agree on one contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          components: clippy, rustfmt
-      - run: cargo fmt --check
-      - run: cargo clippy --all-targets -- -D warnings
-      - run: cargo test --locked --all-targets
-      - name: no dependencies crept in
+          persist-credentials: false
+      - name: Ports vs contracts/expected-resources.json
+        run: scripts/check-contract-parity.sh
+
+  rust:
+    name: cargo
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: 1.88.0
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: rust
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Lint
+        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Test
+        run: cargo test --all-targets --all-features
+      - name: Doc tests
+        run: cargo test --doc
+      - name: Build without std (the wasm/no_std path this crate promises)
+        run: cargo check --no-default-features
+      - name: Build for wasm32
+        run: cargo check --target wasm32-unknown-unknown --no-default-features
+
+  typescript:
+    name: node --test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: typescript
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Refuse to add a runtime dependency
         run: |
-          # This crate ships to browsers and phones; a dependency here is one they cannot refuse.
-          if [ "$(cargo metadata --format-version 1 --no-deps \
-                  | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["packages"][0]["dependencies"]))')" != "0" ]; then
-            echo "::error::gha-indie-worker-pub-lib-core must stay dependency-free"; exit 1
+          set -euo pipefail
+          # The package is zero-dependency by contract: it must load in a browser
+          # bundle and a service worker without a resolver. `npm ci` is therefore
+          # not run, and there is nothing to install.
+          python3 - <<'PY'
+          import json
+          manifest = json.load(open("package.json"))
+          runtime = manifest.get("dependencies", {})
+          assert not runtime, f"runtime dependencies are not allowed: {sorted(runtime)}"
+          print("ok: zero runtime dependencies")
+          PY
+      - name: Test (node strips the types; there is no build step)
+        run: node --test "test/**/*.test.ts"
+
+  dart:
+    name: dart analyze / test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: dart
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Is a Dart SDK available?
+        id: guard
+        run: |
+          set -euo pipefail
+          if command -v dart >/dev/null 2>&1; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo 'Dart SDK not present on this runner — the Dart port was not analysed.' >> "$GITHUB_STEP_SUMMARY"
           fi
+      - name: Resolve dependencies
+        if: steps.guard.outputs.available == 'true'
+        run: dart pub get
+      - name: Analyze
+        if: steps.guard.outputs.available == 'true'
+        run: dart analyze --fatal-infos
+      - name: Test
+        if: steps.guard.outputs.available == 'true'
+        run: dart test
+
+  gleam:
+    name: gleam check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: gleam
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Is a Gleam toolchain available?
+        id: guard
+        run: |
+          set -euo pipefail
+          if command -v gleam >/dev/null 2>&1 && command -v erl >/dev/null 2>&1; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo 'Gleam/Erlang not present on this runner — the Gleam port was not checked.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Check
+        if: steps.guard.outputs.available == 'true'
+        run: gleam check
+      - name: Format
+        if: steps.guard.outputs.available == 'true'
+        run: gleam format --check src test
+      - name: Test
+        if: steps.guard.outputs.available == 'true'
+        run: gleam test

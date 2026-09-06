@@ -1,0 +1,27 @@
+[package]
+name = "gha-indie-worker-pub-lib-core"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+license = "MIT"
+description = "Public client-side core for GHA Indie Worker: typed API resources, request signing, pagination and the onboarding state machine. Browser (wasm32), desktop and mobile."
+repository = "https://github.com/gha-indie-worker/gha-indie-worker-pub-lib-core"
+keywords = ["ci", "client", "wasm", "gha-indie-worker"]
+categories = ["api-bindings", "wasm"]
+
+[features]
+default = ["std"]
+# `std` only adds environment reading. Everything else — types, signing,
+# pagination, the state machine — is available without it, so the crate can be
+# built for a constrained wasm or embedded target.
+std = []
+
+[dependencies]
+serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
+serde_json = { version = "1", default-features = false, features = ["alloc"] }
+hmac = { version = "0.12", default-features = false }
+sha2 = { version = "0.10", default-features = false }
+subtle = { version = "2", default-features = false }
+
+[lints.rust]
+unsafe_code = "forbid"
