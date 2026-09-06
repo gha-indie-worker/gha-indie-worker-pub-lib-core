@@ -294,7 +294,7 @@ mod tests {
             DEFAULT_PAGE_LIMIT,
             "the default must be inside the range"
         );
-        assert!(DEFAULT_PAGE_LIMIT <= MAX_PAGE_LIMIT);
+        const { assert!(DEFAULT_PAGE_LIMIT <= MAX_PAGE_LIMIT) };
     }
 
     #[test]
