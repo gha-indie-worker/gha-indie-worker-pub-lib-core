@@ -1,0 +1,25 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test --locked --all-targets
+      - name: no dependencies crept in
+        run: |
+          # This crate ships to browsers and phones; a dependency here is one they cannot refuse.
+          if [ "$(cargo metadata --format-version 1 --no-deps \
+                  | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["packages"][0]["dependencies"]))')" != "0" ]; then
+            echo "::error::gha-indie-worker-pub-lib-core must stay dependency-free"; exit 1
+          fi

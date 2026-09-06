@@ -1,0 +1,18 @@
+[package]
+name = "gha-indie-worker-pub-lib-core"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+license = "MIT"
+description = "Public client core for GHA Indie Worker: endpoint construction and retry policy"
+repository = "https://github.com/gha-indie-worker/gha-indie-worker-pub-lib-core"
+
+# Deliberately no dependencies: this crate ships inside browsers, desktop apps and phones, and
+# every dependency here becomes one those hosts cannot refuse.
+[dependencies]
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "deny"
