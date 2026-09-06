@@ -236,7 +236,7 @@ mod tests {
 
     use super::*;
 
-    fn lookup_from(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> + '_ {
+    fn lookup_from<'a>(pairs: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<String> + 'a {
         move |key| {
             pairs
                 .iter()
