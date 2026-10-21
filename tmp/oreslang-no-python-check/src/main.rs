@@ -118,7 +118,7 @@ fn main() {
         // Path-only checks still apply even when the content is binary or unreadable.
         let body = fs::read_to_string(&file).unwrap_or_default();
         for problem in violations(&name, &body) {
-            eprintln!("{}: {}", name, problem);
+            eprintln!("{name}: {problem}");
             found += 1;
         }
     }
