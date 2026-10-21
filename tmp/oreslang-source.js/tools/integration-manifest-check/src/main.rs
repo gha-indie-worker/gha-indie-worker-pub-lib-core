@@ -131,7 +131,8 @@ fn expected_upstreams(repository: &str) -> Option<&'static [&'static str]> {
 }
 
 fn parse_strict_json(raw: &[u8]) -> Result<StrictValue, String> {
-    let decoded = std::str::from_utf8(raw).map_err(|_| "manifest must be valid UTF-8".to_owned())?;
+    let decoded =
+        std::str::from_utf8(raw).map_err(|_| "manifest must be valid UTF-8".to_owned())?;
     if decoded.starts_with('﻿') {
         return Err("UTF-8 BOM is prohibited".to_owned());
     }
@@ -226,7 +227,8 @@ fn repository_root_from_args() -> Result<PathBuf, String> {
 }
 
 fn verify_repository(root: &Path) -> Result<String, String> {
-    let root = fs::canonicalize(root).map_err(|error| format!("repository root unavailable: {error}"))?;
+    let root =
+        fs::canonicalize(root).map_err(|error| format!("repository root unavailable: {error}"))?;
     let repository_name = root
         .file_name()
         .and_then(|name| name.to_str())
@@ -326,7 +328,10 @@ mod tests {
 
     #[test]
     fn unsupported_repo_is_rejected() {
-        assert_reject(&valid_manifest("oreslang-source.java"), "oreslang-source.invented");
+        assert_reject(
+            &valid_manifest("oreslang-source.java"),
+            "oreslang-source.invented",
+        );
     }
 
     #[test]
@@ -343,10 +348,7 @@ mod tests {
             let mut value: serde_json::Value =
                 serde_json::from_slice(&valid_manifest("oreslang-source.java")).unwrap();
             value["evidence"] = json!(claim);
-            assert_reject(
-                &serde_json::to_vec(&value).unwrap(),
-                "oreslang-source.java",
-            );
+            assert_reject(&serde_json::to_vec(&value).unwrap(), "oreslang-source.java");
         }
     }
 
@@ -357,16 +359,17 @@ mod tests {
             json!(["oreslang-target-profiles", "oreslang-common-source"]),
             json!(["oreslang-common-source", "oreslang-common-source"]),
             json!(["../oreslang-target-profiles"]),
-            json!(["oreslang-common-source", "oreslang-target-profiles", "other"]),
+            json!([
+                "oreslang-common-source",
+                "oreslang-target-profiles",
+                "other"
+            ]),
         ];
         for upstreams in cases {
             let mut value: serde_json::Value =
                 serde_json::from_slice(&valid_manifest("oreslang-source.java")).unwrap();
             value["upstreams"] = upstreams;
-            assert_reject(
-                &serde_json::to_vec(&value).unwrap(),
-                "oreslang-source.java",
-            );
+            assert_reject(&serde_json::to_vec(&value).unwrap(), "oreslang-source.java");
         }
     }
 
@@ -398,10 +401,7 @@ mod tests {
             &serde_json::to_vec(&bool_schema).unwrap(),
             "oreslang-source.java",
         );
-        assert_reject(
-            br#"{"schemaVersion":NaN}"#,
-            "oreslang-source.java",
-        );
+        assert_reject(br#"{"schemaVersion":NaN}"#, "oreslang-source.java");
         assert_reject(&vec![b' '; MAX_BYTES + 1], "oreslang-source.java");
         assert_reject(&[0xff], "oreslang-source.java");
 
@@ -415,10 +415,7 @@ mod tests {
         let mut value: serde_json::Value =
             serde_json::from_slice(&valid_manifest("oreslang-source.java")).unwrap();
         value["note"] = json!("CI parity is asserted.");
-        assert_reject(
-            &serde_json::to_vec(&value).unwrap(),
-            "oreslang-source.java",
-        );
+        assert_reject(&serde_json::to_vec(&value).unwrap(), "oreslang-source.java");
     }
 
     #[cfg(unix)]
