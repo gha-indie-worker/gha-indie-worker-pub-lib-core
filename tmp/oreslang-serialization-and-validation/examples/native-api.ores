@@ -1,0 +1,43 @@
+// Executable native dynamic-codec example.
+//
+// The bytes below are UTF-8 JSON: {"name":"ores","age":7}
+
+import class Value, Utf8Text, WireMember from '../src/core/value';
+import fnc object_get from '../src/core/value';
+import class DecodeError, DecodedValue from '../src/core/options';
+import fnc decode_default from '../src/json/json';
+
+pub routine main(): void {
+  val List<int> bytes = new List<int>(
+    123,
+    34, 110, 97, 109, 101, 34,
+    58,
+    34, 111, 114, 101, 115, 34,
+    44,
+    34, 97, 103, 101, 34,
+    58,
+    55,
+    125
+  );
+
+  val Result<DecodedValue, DecodeError> decoded = decode_default(bytes);
+
+  if decoded.is_err() then
+    stdio.stdout.println("decode failed");
+    return;
+  fi
+
+  val Value root = decoded.unwrap().value;
+  val Result<Value, String> age = object_get(
+    root,
+    new Utf8Text(new List<int>(97, 103, 101))
+  );
+
+  if age.is_err() then
+    stdio.stdout.println("age missing");
+    return;
+  fi
+
+  stdio.stdout.println("native JSON decode succeeded");
+  return;
+}

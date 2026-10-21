@@ -1,0 +1,76 @@
+// Exact signed-int64 conversion regression tests for Value integer wire form.
+// Deliberately independent of floating-point Zorde range comparison.
+import fnc require_true from './assert';
+import class Value, IntParse from '../src/core/value';
+import fnc value_int, value_number_lexeme, parse_int, int_to_decimal_bytes, bytes_equal from '../src/core/value';
+
+fnc check_round_trip(int n, List<int> expected): void {
+  val List<int> bytes = int_to_decimal_bytes(n);
+  require_true(bytes_equal(rt borrow bytes, rt borrow expected),
+    "signed integer must encode as exact canonical decimal bytes");
+  val IntParse parsed = parse_int(value_int(n));
+  require_true(parsed.ok, "encoded int64 must decode as exact integer");
+  require_true(parsed.value == n, "round-trip must preserve exact int64 bits");
+  return;
+}
+
+pub fnc run_int64_decimal_codec_tests(): void {
+  check_round_trip(0, new List<int>(48));
+  check_round_trip(-1, new List<int>(45,49));
+  check_round_trip(1000, new List<int>(49,48,48,48));
+  check_round_trip(-1000, new List<int>(45,49,48,48,48));
+  check_round_trip(
+    9007199254740993,
+    new List<int>(57,48,48,55,49,57,57,50,53,52,55,52,48,57,57,51)
+  );
+  check_round_trip(
+    -9007199254740993,
+    new List<int>(45,57,48,48,55,49,57,57,50,53,52,55,52,48,57,57,51)
+  );
+  check_round_trip(
+    9223372036854775807,
+    new List<int>(57,50,50,51,51,55,50,48,51,54,56,53,52,55,55,53,56,48,55)
+  );
+  check_round_trip(
+    -9223372036854775807 - 1,
+    new List<int>(45,57,50,50,51,51,55,50,48,51,54,56,53,52,55,55,53,56,48,56)
+  );
+  // Decimal parsing is exact and must reject a one-digit overflow on
+  // either signed boundary (no intermediate floating-point division).
+  require_true(!parse_int(value_number_lexeme(new List<int>(
+    57,50,50,51,51,55,50,48,51,54,56,53,52,55,55,53,56,48,56
+  ))).ok, "INT64_MAX plus one must never wrap or round to an accepted value");
+
+  require_true(!parse_int(value_number_lexeme(new List<int>(
+    45,57,50,50,51,51,55,50,48,51,54,56,53,52,55,55,53,56,48,57
+  ))).ok, "INT64_MIN minus one must be refused");
+
+  require_true(!parse_int(value_number_lexeme(
+    new List<int>(48,49)
+  )).ok, "leading zero must be refused by integer parser");
+  require_true(!parse_int(value_number_lexeme(
+    new List<int>(45,48,49)
+  )).ok, "negative leading zero must be refused by integer parser");
+
+  require_true(!parse_int(value_number_lexeme(
+    new List<int>(49,101,51)
+  )).ok, "scientific notation is not a signed-int64 lexeme");
+  require_true(!parse_int(value_number_lexeme(
+    new List<int>(49,46,48)
+  )).ok, "fraction is not a signed-int64 lexeme");
+
+  val IntParse minus_zero = parse_int(value_number_lexeme(
+    new List<int>(45,48)
+  ));
+  require_true(minus_zero.ok && minus_zero.value == 0,
+    "canonical JSON -0 is a valid integer zero");
+
+  val IntParse over_binary53 = parse_int(value_number_lexeme(
+    new List<int>(57,48,48,55,49,57,57,50,53,52,55,52,48,57,57,51)
+  ));
+  require_true(over_binary53.ok && over_binary53.value == 9007199254740993,
+    "2^53 + 1 parses exactly without binary float");
+
+  stdio.stdout.println("native exact signed-int64 codec tests passed");
+  return;
+}

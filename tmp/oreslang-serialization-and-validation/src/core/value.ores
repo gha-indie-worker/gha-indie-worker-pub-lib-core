@@ -1,0 +1,740 @@
+// Shared dynamic wire-value model for JSON, MessagePack, CBOR, and schema-aware adapters.
+//
+// Oreslang userland is pointer-free: ordinary object arguments are references.
+// No address-of, dereference, or pointer arithmetic is used in this library.
+
+pub define class Utf8Text as
+  pub val List<int> bytes;
+end
+
+pub define class WireMember as
+  pub val Utf8Text key;
+  pub val Value value;
+end
+
+pub define class MapEntry as
+  pub val Value key;
+  pub val Value value;
+end
+
+pub define class IntParse as
+  pub val bool ok;
+  pub val int value;
+end
+
+pub define class Value as
+  // kind:
+  // 0 null, 1 bool, 2 number, 3 utf8 string, 4 bytes,
+  // 5 array, 6 string-key object, 7 extension, 8 general map.
+  pub val int kind;
+  pub val bool bool_value;
+  pub val List<int> number_lexeme;
+  pub val Utf8Text string_value;
+  pub val List<int> bytes_value;
+  pub val List<Value> array_value;
+  pub val List<WireMember> object_value;
+  pub val List<MapEntry> map_value;
+  pub val int extension_type;
+end
+
+pub fnc null_kind(): int { return 0; }
+pub fnc bool_kind(): int { return 1; }
+pub fnc number_kind(): int { return 2; }
+pub fnc string_kind(): int { return 3; }
+pub fnc bytes_kind(): int { return 4; }
+pub fnc array_kind(): int { return 5; }
+pub fnc object_kind(): int { return 6; }
+pub fnc extension_kind(): int { return 7; }
+pub fnc map_kind(): int { return 8; }
+
+fnc empty_text(): Utf8Text {
+  return new Utf8Text(new List<int>());
+}
+
+fnc empty_value_list(): List<Value> {
+  return new List<Value>();
+}
+
+fnc empty_member_list(): List<WireMember> {
+  return new List<WireMember>();
+}
+
+fnc empty_map_entries(): List<MapEntry> {
+  return new List<MapEntry>();
+}
+
+fnc empty_bytes(): List<int> {
+  return new List<int>();
+}
+
+pub fnc utf8_text(List<int> bytes): Utf8Text {
+  return new Utf8Text(bytes);
+}
+
+pub fnc value_null(): Value {
+  return new Value(
+    0,
+    false,
+    empty_bytes(),
+    empty_text(),
+    empty_bytes(),
+    empty_value_list(),
+    empty_member_list(),
+    empty_map_entries(),
+    0
+  );
+}
+
+pub fnc value_bool(bool value): Value {
+  return new Value(
+    1,
+    value,
+    empty_bytes(),
+    empty_text(),
+    empty_bytes(),
+    empty_value_list(),
+    empty_member_list(),
+    empty_map_entries(),
+    0
+  );
+}
+
+pub fnc value_number_lexeme(List<int> lexeme): Value {
+  return new Value(
+    2,
+    false,
+    lexeme,
+    empty_text(),
+    empty_bytes(),
+    empty_value_list(),
+    empty_member_list(),
+    empty_map_entries(),
+    0
+  );
+}
+
+pub fnc int_to_decimal_bytes(int value): List<int> {
+  // Encode exact signed int64 without floating-point division, int64
+  // overflow or a nonexistent integer-division operator. In Oreslang,
+  // '/' is real division (float) EVEN for int/int, so using it here
+  // would corrupt integers above 2^53 and violate Zorde refinements.
+  if value == 0 then return new List<int>(48); fi
+
+  val List<int> output = new List<int>();
+  let int remaining = value;
+  if value < 0 then
+    output.add(45);
+  else
+    // Negating positive int64 is safe, including Long.MAX_VALUE.
+    // Keeping the magnitude negative also supports Long.MIN_VALUE.
+    remaining = -value;
+  fi
+
+  // Decimal long division by powers of ten, with at most nine subtractions
+  // per digit. No '/', no float conversion, and no abs(INT64_MIN).
+  val List<int> places = new List<int>(
+    1000000000000000000, 100000000000000000,
+    10000000000000000, 1000000000000000,
+    100000000000000, 10000000000000,
+    1000000000000, 100000000000,
+    10000000000, 1000000000,
+    100000000, 10000000,
+    1000000, 100000,
+    10000, 1000,
+    100, 10, 1
+  );
+  let bool started = false;
+  for const place of places do
+    let int digit = 0;
+    loop do
+      if remaining > -place then break; fi
+      remaining = remaining + place;
+      digit = digit + 1;
+    done
+    if digit != 0 || started then
+      started = true;
+      output.add(48 + digit);
+    fi
+  done
+  return output;
+}
+
+pub fnc value_int(int value): Value {
+  return value_number_lexeme(int_to_decimal_bytes(value));
+}
+
+pub fnc value_string(Utf8Text value): Value {
+  return new Value(
+    3,
+    false,
+    empty_bytes(),
+    value,
+    empty_bytes(),
+    empty_value_list(),
+    empty_member_list(),
+    empty_map_entries(),
+    0
+  );
+}
+
+pub fnc value_bytes(List<int> value): Value {
+  return new Value(
+    4,
+    false,
+    empty_bytes(),
+    empty_text(),
+    value,
+    empty_value_list(),
+    empty_member_list(),
+    empty_map_entries(),
+    0
+  );
+}
+
+pub fnc value_array(List<Value> values): Value {
+  return new Value(
+    5,
+    false,
+    empty_bytes(),
+    empty_text(),
+    empty_bytes(),
+    values,
+    empty_member_list(),
+    empty_map_entries(),
+    0
+  );
+}
+
+pub fnc value_object(List<WireMember> members): Value {
+  return new Value(
+    6,
+    false,
+    empty_bytes(),
+    empty_text(),
+    empty_bytes(),
+    empty_value_list(),
+    members,
+    empty_map_entries(),
+    0
+  );
+}
+
+pub fnc value_extension(int extension_type, List<int> payload): Value {
+  return new Value(
+    7,
+    false,
+    empty_bytes(),
+    empty_text(),
+    payload,
+    empty_value_list(),
+    empty_member_list(),
+    empty_map_entries(),
+    extension_type
+  );
+}
+
+pub fnc value_map(List<MapEntry> entries): Value {
+  return new Value(
+    8,
+    false,
+    empty_bytes(),
+    empty_text(),
+    empty_bytes(),
+    empty_value_list(),
+    empty_member_list(),
+    entries,
+    0
+  );
+}
+
+pub fnc bytes_equal(List<int> left, List<int> right): bool {
+  if left.length != right.length then
+    return false;
+  fi
+
+  let int i = 0;
+  loop do
+    if i >= left.length then
+      break;
+    fi
+    if left[i] != right[i] then
+      return false;
+    fi
+    i = i + 1;
+  done
+
+  return true;
+}
+
+pub fnc text_equal(Utf8Text left, Utf8Text right): bool {
+  return bytes_equal(left.bytes, right.bytes);
+}
+
+fnc object_find_index_borrow(borrow Value object, borrow Utf8Text key): int {
+  if object.kind != 6 then
+    return -1;
+  fi
+
+  // The lookup key is owned by this function: never transfer it repeatedly
+  // to a by-value equality callable from inside a loop.
+  val List<int> search_bytes = key.bytes;
+  let int i = 0;
+  for const member of object.object_value do
+    val List<int> current_bytes = member.key.bytes;
+    if current_bytes.length == search_bytes.length then
+      let bool equal = true;
+      let int j = 0;
+      loop do
+        if j >= search_bytes.length then
+          break;
+        fi
+        if current_bytes[j] != search_bytes[j] then
+          equal = false;
+          break;
+        fi
+        j = j + 1;
+      done
+      if equal then
+        return i;
+      fi
+    fi
+    i = i + 1;
+  done
+
+  return -1;
+}
+
+pub fnc object_find_index(Value object, Utf8Text key): int {
+  return object_find_index_borrow(rt borrow object, rt borrow key);
+}
+
+pub fnc object_has(Value object, Utf8Text key): bool {
+  return object_find_index(object, key) >= 0;
+}
+
+pub fnc object_get(Value object, Utf8Text key): Result<Value, String> {
+  let int index = object_find_index_borrow(rt borrow object, rt borrow key);
+  if index < 0 then
+    return Err("object key not found");
+  fi
+  return Ok(object.object_value[index].value);
+}
+
+fnc hash_mix(int hash, int value): int {
+  // Deliberate wrapping integer arithmetic: hashes are bucket selectors only;
+  // collisions are always resolved with semantic equality.
+  return (hash * 1099511628211) ^ value;
+}
+
+pub fnc bytes_hash(List<int> bytes): int {
+  let int hash = 1469598103934665603;
+  for const byte of bytes do
+    hash = hash_mix(hash, byte);
+  done
+  return hash;
+}
+
+pub fnc text_hash(Utf8Text text): int {
+  return bytes_hash(text.bytes);
+}
+
+pub fnc value_hash(Value value): int {
+  return value_hash_bounded(value, 0, 128);
+}
+
+fnc value_hash_bounded(
+  Value value,
+  int depth,
+  int max_depth
+): int {
+  let int hash = hash_mix(1469598103934665603, value.kind);
+
+  if depth > max_depth then
+    return hash_mix(hash, 127);
+  fi
+
+  if value.kind == 0 then
+    return hash;
+  fi
+
+  if value.kind == 1 then
+    return hash_mix(hash, value.bool_value ? 1 : 0);
+  fi
+
+  if value.kind == 2 then
+    return hash_mix(hash, bytes_hash(value.number_lexeme));
+  fi
+
+  if value.kind == 3 then
+    return hash_mix(hash, text_hash(value.string_value));
+  fi
+
+  if value.kind == 4 then
+    return hash_mix(hash, bytes_hash(value.bytes_value));
+  fi
+
+  if value.kind == 5 then
+    for const item of value.array_value do
+      hash = hash_mix(hash, value_hash_bounded(item, depth + 1, max_depth));
+    done
+    return hash_mix(hash, value.array_value.length);
+  fi
+
+  if value.kind == 6 then
+    let int aggregate_xor = 0;
+    let int aggregate_sum = 0;
+
+    for const member of value.object_value do
+      let int pair_hash = hash_mix(
+        text_hash(member.key),
+        value_hash_bounded(member.value, depth + 1, max_depth)
+      );
+      aggregate_xor = aggregate_xor ^ pair_hash;
+      aggregate_sum = aggregate_sum + pair_hash;
+    done
+
+    hash = hash_mix(hash, aggregate_xor);
+    hash = hash_mix(hash, aggregate_sum);
+    return hash_mix(hash, value.object_value.length);
+  fi
+
+  if value.kind == 7 then
+    hash = hash_mix(hash, value.extension_type);
+    return hash_mix(hash, bytes_hash(value.bytes_value));
+  fi
+
+  if value.kind == 8 then
+    let int aggregate_xor = 0;
+    let int aggregate_sum = 0;
+
+    for const entry of value.map_value do
+      let int pair_hash = hash_mix(
+        value_hash_bounded(entry.key, depth + 1, max_depth),
+        value_hash_bounded(entry.value, depth + 1, max_depth)
+      );
+      aggregate_xor = aggregate_xor ^ pair_hash;
+      aggregate_sum = aggregate_sum + pair_hash;
+    done
+
+    hash = hash_mix(hash, aggregate_xor);
+    hash = hash_mix(hash, aggregate_sum);
+    return hash_mix(hash, value.map_value.length);
+  fi
+
+  return hash;
+}
+
+pub fnc value_deep_equal(Value left, Value right): bool {
+  return value_deep_equal_bounded(left, right, 0, 128);
+}
+
+fnc value_deep_equal_bounded(
+  Value left,
+  Value right,
+  int depth,
+  int max_depth
+): bool {
+  if left == right then
+    return true;
+  fi
+
+  if depth > max_depth then
+    return false;
+  fi
+
+  if left.kind != right.kind then
+    return false;
+  fi
+
+  if left.kind == 0 then
+    return true;
+  fi
+
+  if left.kind == 1 then
+    return left.bool_value == right.bool_value;
+  fi
+
+  if left.kind == 2 then
+    return bytes_equal(left.number_lexeme, right.number_lexeme);
+  fi
+
+  if left.kind == 3 then
+    return text_equal(left.string_value, right.string_value);
+  fi
+
+  if left.kind == 4 then
+    return bytes_equal(left.bytes_value, right.bytes_value);
+  fi
+
+  if left.kind == 5 then
+    if left.array_value.length != right.array_value.length then
+      return false;
+    fi
+
+    let int i = 0;
+    loop do
+      if i >= left.array_value.length then
+        break;
+      fi
+      if !value_deep_equal_bounded(
+        left.array_value[i],
+        right.array_value[i],
+        depth + 1,
+        max_depth
+      ) then
+        return false;
+      fi
+      i = i + 1;
+    done
+    return true;
+  fi
+
+  if left.kind == 6 then
+    if left.object_value.length != right.object_value.length then
+      return false;
+    fi
+
+    val Map<int, List<int>> buckets = new Map<int, List<int>>();
+    val List<bool> used = new List<bool>();
+    let int i = 0;
+
+    loop do
+      if i >= right.object_value.length then
+        break;
+      fi
+
+      used.add(false);
+
+      let int hash = text_hash(right.object_value[i].key);
+      if buckets.contains(hash) then
+        val List<int> indices = buckets.get(hash);
+        indices.add(i);
+      else
+        val List<int> indices = new List<int>();
+        indices.add(i);
+        buckets.set(hash, indices);
+      fi
+      i = i + 1;
+    done
+
+    for const a of left.object_value do
+      let int hash = text_hash(a.key);
+      if !buckets.contains(hash) then
+        return false;
+      fi
+
+      let bool matched = false;
+      val List<int> indices = buckets.get(hash);
+      for const index of indices do
+        if used[index] then
+          continue;
+        fi
+
+        let WireMember b = right.object_value[index];
+        if text_equal(a.key, b.key) &&
+           value_deep_equal_bounded(a.value, b.value, depth + 1, max_depth) then
+          used[index] = true;
+          matched = true;
+          break;
+        fi
+      done
+
+      if !matched then
+        return false;
+      fi
+    done
+
+    return true;
+  fi
+
+  if left.kind == 7 then
+    if left.extension_type != right.extension_type then
+      return false;
+    fi
+    return bytes_equal(left.bytes_value, right.bytes_value);
+  fi
+
+  if left.kind == 8 then
+    if left.map_value.length != right.map_value.length then
+      return false;
+    fi
+
+    val Map<int, List<int>> buckets = new Map<int, List<int>>();
+    val List<bool> used = new List<bool>();
+    let int i = 0;
+
+    loop do
+      if i >= right.map_value.length then
+        break;
+      fi
+
+      used.add(false);
+
+      let int hash = value_hash_bounded(
+        right.map_value[i].key,
+        depth + 1,
+        max_depth
+      );
+
+      if buckets.contains(hash) then
+        val List<int> indices = buckets.get(hash);
+        indices.add(i);
+      else
+        val List<int> indices = new List<int>();
+        indices.add(i);
+        buckets.set(hash, indices);
+      fi
+      i = i + 1;
+    done
+
+    for const a of left.map_value do
+      let int hash = value_hash_bounded(a.key, depth + 1, max_depth);
+      if !buckets.contains(hash) then
+        return false;
+      fi
+
+      let bool matched = false;
+      val List<int> indices = buckets.get(hash);
+      for const index of indices do
+        if used[index] then
+          continue;
+        fi
+
+        let MapEntry b = right.map_value[index];
+        if value_deep_equal_bounded(a.key, b.key, depth + 1, max_depth) &&
+           value_deep_equal_bounded(a.value, b.value, depth + 1, max_depth) then
+          used[index] = true;
+          matched = true;
+          break;
+        fi
+      done
+
+      if !matched then
+        return false;
+      fi
+    done
+
+    return true;
+  fi
+
+  return false;
+}
+
+
+pub fnc parse_int(Value value): IntParse {
+  if value.kind != 2 then
+    return new IntParse(false, 0);
+  fi
+
+  val List<int> bytes = value.number_lexeme;
+  // Signed int64 has at most 19 digits plus an optional leading minus.
+  if bytes.length == 0 || bytes.length > 20 then
+    return new IntParse(false, 0);
+  fi
+
+  let int i = 0;
+  let bool negative = false;
+  if bytes[0] == 45 then
+    negative = true;
+    i = 1;
+    if i >= bytes.length then
+      return new IntParse(false, 0);
+    fi
+  fi
+
+  // Do not accept ambiguous integer spellings such as 01 or -01.
+  // JSON's -0 is valid and is represented by the integer zero.
+  if bytes[i] == 48 && i + 1 < bytes.length then
+    return new IntParse(false, 0);
+  fi
+
+  // Canonical signed-int64 cutoffs. Oreslang '/' yields a float, even for
+  // integer operands, so NEVER use division in integer overflow decisions.
+  // Valid positive maximum: 922337203685477580 * 10 + 7.
+  // Valid negative minimum: -922337203685477580 * 10 - 8.
+  val int positive_cutoff = 922337203685477580;
+  val int negative_cutoff = -922337203685477580;
+  let int result = 0;
+
+  loop do
+    if i >= bytes.length then break; fi
+    let int byte = bytes[i];
+    if byte < 48 || byte > 57 then
+      return new IntParse(false, 0);
+    fi
+    let int digit = byte - 48;
+
+    if negative then
+      if result < negative_cutoff ||
+         (result == negative_cutoff && digit > 8) then
+        return new IntParse(false, 0);
+      fi
+      result = result * 10 - digit;
+    else
+      if result > positive_cutoff ||
+         (result == positive_cutoff && digit > 7) then
+        return new IntParse(false, 0);
+      fi
+      result = result * 10 + digit;
+    fi
+    i = i + 1;
+  done
+
+  return new IntParse(true, result);
+}
+
+
+// Reflection-free traversal of values decoded from unknown wire schemas.
+// String-key objects, arbitrary-key binary maps, and array indices all use
+// the same closed Value key. This never materializes Java/JVM objects.
+pub fnc value_lookup(Value container, Value key): Result<Value, String> {
+  if container.kind == 6 then
+    if key.kind != 3 then
+      return Err("string-key object requires a UTF-8 string key");
+    fi
+    return object_get(container, key.string_value);
+  fi
+
+  if container.kind == 8 then
+    for const entry of container.map_value do
+      if value_deep_equal(entry.key, key) then
+        return Ok(entry.value);
+      fi
+    done
+    return Err("general map key not found");
+  fi
+
+  if container.kind == 5 then
+    let IntParse index = parse_int(key);
+    if !index.ok || index.value < 0 ||
+       index.value >= container.array_value.length then
+      return Err("array index must be an in-bounds integer");
+    fi
+    return Ok(container.array_value[index.value]);
+  fi
+
+  return Err("dynamic lookup requires an object, map, or array");
+}
+
+// Path segments are Value strings for JSON/object keys, Value numbers for
+// array indices, and arbitrary Values for MessagePack/CBOR map keys.
+// Empty path denotes the root. Bounded iteration avoids unbounded paths.
+pub fnc value_lookup_path(
+  Value root,
+  List<Value> segments
+): Result<Value, String> {
+  if segments.length > 128 then
+    return Err("dynamic path exceeds maximum length of 128");
+  fi
+
+  let Value current = root;
+  for const segment of segments do
+    let Result<Value, String> next = value_lookup(current, segment);
+    if next.is_err() then
+      return Err("dynamic path segment not found or has wrong type");
+    fi
+    current = next.unwrap();
+  done
+
+  return Ok(current);
+}
