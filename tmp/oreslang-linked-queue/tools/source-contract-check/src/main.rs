@@ -33,10 +33,10 @@ fn validate_root(root: &Path) -> Result<Vec<String>, String> {
         Regex::new(r";\s*(then|do)(?:\s|$)").map_err(|error| error.to_string())?;
     let compact_conditional =
         Regex::new(r"\b(then|do)\b.*\b(fi|return)\b").map_err(|error| error.to_string())?;
-    let java_interop = Regex::new(r#"\bimport\s+.*?from\s+["']java:"#)
-        .map_err(|error| error.to_string())?;
-    let readonly_queue = Regex::new(r"\blet\s+IntLinkedQueue\s+\w+\s*=")
-        .map_err(|error| error.to_string())?;
+    let java_interop =
+        Regex::new(r#"\bimport\s+.*?from\s+["']java:"#).map_err(|error| error.to_string())?;
+    let readonly_queue =
+        Regex::new(r"\blet\s+IntLinkedQueue\s+\w+\s*=").map_err(|error| error.to_string())?;
 
     let mut files = WalkDir::new(root)
         .follow_links(false)
@@ -44,15 +44,19 @@ fn validate_root(root: &Path) -> Result<Vec<String>, String> {
         .filter_map(Result::ok)
         .filter(|entry| entry.file_type().is_file())
         .map(|entry| entry.into_path())
-        .filter(|path| path.extension().is_some_and(|extension| extension == "ores"))
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "ores")
+        })
         .collect::<Vec<_>>();
     files.sort();
 
     let mut errors = Vec::new();
     for path in files {
         let relative = path.strip_prefix(root).unwrap_or(&path);
-        let text = fs::read_to_string(&path)
-            .map_err(|error| format!("{}: cannot read UTF-8 source: {error}", relative.display()))?;
+        let text = fs::read_to_string(&path).map_err(|error| {
+            format!("{}: cannot read UTF-8 source: {error}", relative.display())
+        })?;
 
         if !text.is_empty() && !text.ends_with('\n') {
             errors.push(format!("{}: missing final newline", relative.display()));
@@ -116,8 +120,8 @@ fn validate_root(root: &Path) -> Result<Vec<String>, String> {
         .map(|line| line.split("//").next().unwrap_or(""))
         .collect::<Vec<_>>()
         .join("\n");
-    let any_declaration = Regex::new(r"(?m)^\s*pub\s+([A-Za-z_]\w*)\s*\(")
-        .map_err(|error| error.to_string())?;
+    let any_declaration =
+        Regex::new(r"(?m)^\s*pub\s+([A-Za-z_]\w*)\s*\(").map_err(|error| error.to_string())?;
     let mutable_declaration =
         Regex::new(r"(?m)^\s*pub\s+([A-Za-z_]\w*)\s*\(\s*mut\s+self\s*\)\s*\(")
             .map_err(|error| error.to_string())?;
@@ -132,8 +136,14 @@ fn validate_root(root: &Path) -> Result<Vec<String>, String> {
         .collect::<Vec<_>>();
 
     for method in MUTATORS {
-        let count = declarations.iter().filter(|name| name.as_str() == method).count();
-        let mutable_count = mutable.iter().filter(|name| name.as_str() == method).count();
+        let count = declarations
+            .iter()
+            .filter(|name| name.as_str() == method)
+            .count();
+        let mutable_count = mutable
+            .iter()
+            .filter(|name| name.as_str() == method)
+            .count();
         if count != 1 || mutable_count != 1 {
             errors.push(format!(
                 "src/int_linked_queue.ores: {method} must appear once with mut self"
@@ -259,10 +269,7 @@ mod tests {
     #[test]
     fn observer_cannot_be_mutable() {
         let fixture = Fixture::new();
-        fixture.edit(
-            "pub contains(int key)",
-            "pub contains(mut self)(int key)",
-        );
+        fixture.edit("pub contains(int key)", "pub contains(mut self)(int key)");
         assert!(errors(fixture.root())
             .iter()
             .any(|error| error.contains("contains")));
