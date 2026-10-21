@@ -62,7 +62,12 @@ fn forbidden_execution_line(line: &str) -> bool {
 }
 
 fn python_shebang(body: &str) -> bool {
-    let first = body\n        .lines()\n        .next()\n        .unwrap_or("")\n        .trim()\n        .to_ascii_lowercase();
+    let first = body
+        .lines()
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
     first.starts_with("#!")
         && (first.contains("/python")
             || first.contains("env python")
@@ -74,7 +79,8 @@ fn python_shebang(body: &str) -> bool {
 fn violations(path: &str, body: &str) -> Vec<String> {
     let mut messages = Vec::new();
     if forbidden_path(path) {
-        messages\n            .push("Python source, notebook, dependency manifest, or environment file".to_string());
+        messages
+            .push("Python source, notebook, dependency manifest, or environment file".to_string());
     }
     if python_shebang(body) {
         messages.push("Python/PyPy shebang".to_string());
@@ -101,7 +107,11 @@ fn main() {
     }
 
     let mut found = 0usize;
-    for raw in output\n        .stdout\n        .split(|byte| *byte == 0)\n        .filter(|v| !v.is_empty())\n    {
+    for raw in output
+        .stdout
+        .split(|byte| *byte == 0)
+        .filter(|v| !v.is_empty())
+    {
         let name = String::from_utf8_lossy(raw);
         let file = Path::new(&root).join(name.as_ref());
 
