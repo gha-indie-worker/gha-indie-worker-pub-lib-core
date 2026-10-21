@@ -152,8 +152,14 @@ fn validate_root(root: &Path) -> Result<Vec<String>, String> {
     }
 
     for method in READERS {
-        let count = declarations.iter().filter(|name| name.as_str() == method).count();
-        let mutable_count = mutable.iter().filter(|name| name.as_str() == method).count();
+        let count = declarations
+            .iter()
+            .filter(|name| name.as_str() == method)
+            .count();
+        let mutable_count = mutable
+            .iter()
+            .filter(|name| name.as_str() == method)
+            .count();
         if count != 1 || mutable_count != 0 {
             errors.push(format!(
                 "src/int_linked_queue.ores: {method} must appear once without mut self"
