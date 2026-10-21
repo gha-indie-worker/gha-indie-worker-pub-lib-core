@@ -105,24 +105,16 @@ fn imported_names(raw: &str) -> Vec<String> {
 fn declaration_pattern(kind: &str, name: &str) -> Result<Option<Regex>, String> {
     let name = regex::escape(name);
     let expression = match kind {
-        "class" => format!(
-            r"\b(?:pub\s+define\s+class|define\s+(?:pub\s+)?class)\s+{name}\b"
-        ),
-        "fnc" => format!(
-            r"\b(?:pub\s+)?(?:async\s+|nlex\s+|pure\s+)*fnc\s+{name}\b"
-        ),
-        "interface" => format!(
-            r"\b(?:pub\s+define\s+interface|define\s+(?:pub\s+)?interface)\s+{name}\b"
-        ),
-        "trait" => format!(
-            r"\b(?:pub\s+define\s+trait|define\s+(?:pub\s+)?trait)\s+{name}\b"
-        ),
-        "struct" => format!(
-            r"\b(?:pub\s+define\s+struct|define\s+(?:pub\s+)?struct)\s+{name}\b"
-        ),
-        "types" => format!(
-            r"\b(?:type|define\s+(?:pub\s+)?(?:class|interface|trait|struct))\s+{name}\b"
-        ),
+        "class" => format!(r"\b(?:pub\s+define\s+class|define\s+(?:pub\s+)?class)\s+{name}\b"),
+        "fnc" => format!(r"\b(?:pub\s+)?(?:async\s+|nlex\s+|pure\s+)*fnc\s+{name}\b"),
+        "interface" => {
+            format!(r"\b(?:pub\s+define\s+interface|define\s+(?:pub\s+)?interface)\s+{name}\b")
+        }
+        "trait" => format!(r"\b(?:pub\s+define\s+trait|define\s+(?:pub\s+)?trait)\s+{name}\b"),
+        "struct" => format!(r"\b(?:pub\s+define\s+struct|define\s+(?:pub\s+)?struct)\s+{name}\b"),
+        "types" => {
+            format!(r"\b(?:type|define\s+(?:pub\s+)?(?:class|interface|trait|struct))\s+{name}\b")
+        }
         _ => return Ok(None),
     };
     Regex::new(&expression)
@@ -158,7 +150,10 @@ fn source_files(root: &Path) -> Vec<PathBuf> {
                 .filter_map(Result::ok)
                 .filter(|entry| entry.file_type().is_file())
                 .map(|entry| entry.into_path())
-                .filter(|path| path.extension().is_some_and(|extension| extension == "ores")),
+                .filter(|path| {
+                    path.extension()
+                        .is_some_and(|extension| extension == "ores")
+                }),
         );
     }
     files.sort();
@@ -244,7 +239,10 @@ fn validate_root(root: &Path) -> Result<(usize, Vec<String>), String> {
 
             let parent = path.parent().ok_or("source file has no parent")?;
             let mut target_path = lexical_normalize(&parent.join(target));
-            if target_path.extension().is_none_or(|extension| extension != "ores") {
+            if target_path
+                .extension()
+                .is_none_or(|extension| extension != "ores")
+            {
                 target_path.set_extension("ores");
             }
 
@@ -270,8 +268,9 @@ fn validate_root(root: &Path) -> Result<(usize, Vec<String>), String> {
                 continue;
             }
 
-            let resolved_target = fs::canonicalize(&target_path)
-                .map_err(|error| format!("{}: cannot resolve import: {error}", target_path.display()))?;
+            let resolved_target = fs::canonicalize(&target_path).map_err(|error| {
+                format!("{}: cannot resolve import: {error}", target_path.display())
+            })?;
             if !resolved_target.starts_with(&root) {
                 push_error(
                     &mut errors,
@@ -284,7 +283,10 @@ fn validate_root(root: &Path) -> Result<(usize, Vec<String>), String> {
             }
 
             let target_text = fs::read_to_string(&resolved_target).map_err(|error| {
-                format!("{}: cannot read import target: {error}", resolved_target.display())
+                format!(
+                    "{}: cannot read import target: {error}",
+                    resolved_target.display()
+                )
             })?;
             for name in imported_names(raw_names) {
                 if let Some(pattern) = declaration_pattern(kind, &name)? {
@@ -402,9 +404,7 @@ mod tests {
             "define pub class Bar as\nend\n",
         );
         let (_, errors) = validate_root(temp.path()).unwrap();
-        assert!(errors
-            .iter()
-            .any(|error| error.contains("is not declared")));
+        assert!(errors.iter().any(|error| error.contains("is not declared")));
     }
 
     #[test]
@@ -415,7 +415,9 @@ mod tests {
             "import class Foo from '../../outside';\n",
         );
         let (_, errors) = validate_root(temp.path()).unwrap();
-        assert!(errors.iter().any(|error| error.contains("escapes repository")));
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("escapes repository")));
     }
 
     #[test]
