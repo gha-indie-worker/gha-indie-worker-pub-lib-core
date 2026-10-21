@@ -1,0 +1,9 @@
+// EXPECT COMPILE FAILURE: let has a read-only referent capability;
+// constructing a queue does not implicitly grant mut-self receiver access.
+import class IntLinkedQueue from "../../src/int_linked_queue";
+
+pub fnc main() -> int {
+  let IntLinkedQueue queue = new IntLinkedQueue(4);
+  queue.initialize();
+  return 0;
+}
