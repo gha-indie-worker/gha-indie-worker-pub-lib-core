@@ -1,0 +1,391 @@
+// Oreslang-source implementation; no Java, JS, pointers or FFI.
+// Bounded direct-address doubly linked queue, keyed by unique int keys.
+// All storage is private and owned by this instance.
+// Backend note: this requires Array<int> member lowering, not yet in LLVM's
+// published native source slice.
+
+define pub class QueueEntry as
+  pub val int key;
+  pub val int value;
+end
+
+define pub class IntLinkedQueue as
+  val int capacity;
+  let int head = -1;
+  let int tail = -1;
+  let int length = 0;
+  let bool ready = false;
+
+  // Direct-address keys are reused: stored QueueEntry snapshots are NOT
+  // generational handles; a stale key may refer to a later insertion.
+  // -1 means no neighbor. occupied is 0 or 1.
+  let mut Array<int> previous = new Array<int>();
+  let mut Array<int> following = new Array<int>();
+  let mut Array<int> values = new Array<int>();
+  let mut Array<int> occupied = new Array<int>();
+
+  // Required once after construction. Refuse repeat initialization.
+  // Bound allocation up front to prevent unbounded array exhaustion.
+  pub initialize(mut self)() -> bool {
+    if self.ready then
+      return false;
+    fi
+    if self.capacity < 1 then
+      return false;
+    fi
+    if self.capacity > 65536 then
+      return false;
+    fi
+    // Allocate the complete backing store before publishing any field.
+    // On an allocation failure, the existing uninitialized queue is unchanged
+    // rather than being left with four differently sized partial arrays.
+    let mut Array<int> new_previous = new Array<int>();
+    let mut Array<int> new_following = new Array<int>();
+    let mut Array<int> new_values = new Array<int>();
+    let mut Array<int> new_occupied = new Array<int>();
+    for let i = 0; i < self.capacity; i++ do
+      new_previous.add(-1);
+      new_following.add(-1);
+      new_values.add(0);
+      new_occupied.add(0);
+    done
+    self.previous = new_previous;
+    self.following = new_following;
+    self.values = new_values;
+    self.occupied = new_occupied;
+    self.ready = true;
+    return true;
+  }
+
+  pub size() -> int {
+    return self.length;
+  }
+
+  pub is_empty() -> bool {
+    return self.length == 0;
+  }
+
+  pub contains(int key) -> bool {
+    if !self.ready then
+      return false;
+    fi
+    if key < 0 then
+      return false;
+    fi
+    if key >= self.capacity then
+      return false;
+    fi
+    return self.occupied.get(key) == 1;
+  }
+
+  // A real zero value returns Some(0). Missing keys return None.
+  pub get(int key) -> Option<int> {
+    if !self.contains(key) then
+      return None;
+    fi
+    return Some(self.values.get(key));
+  }
+
+  pub first() -> Option<QueueEntry> {
+    if self.head == -1 then
+      return None;
+    fi
+    return Some(new QueueEntry(self.head, self.values.get(self.head)));
+  }
+
+  pub last() -> Option<QueueEntry> {
+    if self.tail == -1 then
+      return None;
+    fi
+    return Some(new QueueEntry(self.tail, self.values.get(self.tail)));
+  }
+
+  // False means duplicate, invalid key, or not initialized.
+  // Rejection must leave head/tail/count/links unchanged.
+  pub enqueue(mut self)(int key, int value) -> bool {
+    if !self.ready then
+      return false;
+    fi
+    if key < 0 then
+      return false;
+    fi
+    if key >= self.capacity then
+      return false;
+    fi
+    if self.occupied.get(key) == 1 then
+      return false;
+    fi
+    self.values.set(key, value);
+    self.occupied.set(key, 1);
+    self.previous.set(key, self.tail);
+    self.following.set(key, -1);
+
+    if self.tail != -1 then
+      self.following.set(self.tail, key);
+    else
+      self.head = key;
+    fi
+
+    self.tail = key;
+    self.length = self.length + 1;
+    return true;
+  }
+
+  pub add_to_front(mut self)(int key, int value) -> bool {
+    if !self.ready then
+      return false;
+    fi
+    if key < 0 then
+      return false;
+    fi
+    if key >= self.capacity then
+      return false;
+    fi
+    if self.occupied.get(key) == 1 then
+      return false;
+    fi
+    self.values.set(key, value);
+    self.occupied.set(key, 1);
+    self.previous.set(key, -1);
+    self.following.set(key, self.head);
+
+    if self.head != -1 then
+      self.previous.set(self.head, key);
+    else
+      self.tail = key;
+    fi
+
+    self.head = key;
+    self.length = self.length + 1;
+    return true;
+  }
+
+  pub insert_before(mut self)(int anchor, int key, int value) -> bool {
+    if !self.contains(anchor) then
+      return false;
+    fi
+    if key < 0 then
+      return false;
+    fi
+    if key >= self.capacity then
+      return false;
+    fi
+    if self.occupied.get(key) == 1 then
+      return false;
+    fi
+    let int earlier = self.previous.get(anchor);
+    self.values.set(key, value);
+    self.occupied.set(key, 1);
+    self.previous.set(key, earlier);
+    self.following.set(key, anchor);
+    self.previous.set(anchor, key);
+
+    if earlier == -1 then
+      self.head = key;
+    else
+      self.following.set(earlier, key);
+    fi
+
+    self.length = self.length + 1;
+    return true;
+  }
+
+  pub insert_after(mut self)(int anchor, int key, int value) -> bool {
+    if !self.contains(anchor) then
+      return false;
+    fi
+    if key < 0 then
+      return false;
+    fi
+    if key >= self.capacity then
+      return false;
+    fi
+    if self.occupied.get(key) == 1 then
+      return false;
+    fi
+    let int later = self.following.get(anchor);
+    self.values.set(key, value);
+    self.occupied.set(key, 1);
+    self.previous.set(key, anchor);
+    self.following.set(key, later);
+    self.following.set(anchor, key);
+
+    if later == -1 then
+      self.tail = key;
+    else
+      self.previous.set(later, key);
+    fi
+
+    self.length = self.length + 1;
+    return true;
+  }
+
+  pub remove(mut self)(int key) -> Option<QueueEntry> {
+    if !self.contains(key) then
+      return None;
+    fi
+    let int earlier = self.previous.get(key);
+    let int later = self.following.get(key);
+    let int value = self.values.get(key);
+
+    // Preconstruct the returned owned object before destructive mutation.
+    // An allocation/Option construction failure must not lose an item.
+    val Option<QueueEntry> removed = Some(new QueueEntry(key, value));
+
+    if earlier == -1 then
+      self.head = later;
+    else
+      self.following.set(earlier, later);
+    fi
+
+    if later == -1 then
+      self.tail = earlier;
+    else
+      self.previous.set(later, earlier);
+    fi
+
+    // Clear links and payload before the key may be reused.
+    self.previous.set(key, -1);
+    self.following.set(key, -1);
+    self.values.set(key, 0);
+    self.occupied.set(key, 0);
+    self.length = self.length - 1;
+    return removed;
+  }
+
+  pub dequeue(mut self)() -> Option<QueueEntry> {
+    if self.head == -1 then
+      return None;
+    fi
+    return self.remove(self.head);
+  }
+
+  pub remove_last(mut self)() -> Option<QueueEntry> {
+    if self.tail == -1 then
+      return None;
+    fi
+    return self.remove(self.tail);
+  }
+
+  // O(capacity). Does not retain obsolete values or internal aliases.
+  pub clear(mut self)() -> void {
+    if !self.ready then
+      return;
+    fi
+    for let i = 0; i < self.capacity; i++ do
+      self.previous.set(i, -1);
+      self.following.set(i, -1);
+      self.values.set(i, 0);
+      self.occupied.set(i, 0);
+    done
+    self.head = -1;
+    self.tail = -1;
+    self.length = 0;
+    return;
+  }
+
+  // Snapshot, never a mutable internal view.
+  pub ordered_keys() -> Array<int> {
+    let mut Array<int> result = new Array<int>();
+    let int current = self.head;
+    for let inspected = 0; inspected < self.length; inspected++ do
+      result.add(current);
+      current = self.following.get(current);
+    done
+    return result;
+  }
+
+  // Validation is intentionally O(capacity) and never required on the hot path.
+  pub validate() -> bool {
+    if !self.ready then
+      return false;
+    fi
+    if self.length < 0 then
+      return false;
+    fi
+    if self.length > self.capacity then
+      return false;
+    fi
+    if self.length == 0 then
+      if self.head != -1 then
+        return false;
+      fi
+      if self.tail != -1 then
+        return false;
+      fi
+    else
+      if !self.contains(self.head) then
+        return false;
+      fi
+      if !self.contains(self.tail) then
+        return false;
+      fi
+      if self.previous.get(self.head) != -1 then
+        return false;
+      fi
+      if self.following.get(self.tail) != -1 then
+        return false;
+      fi
+    fi
+
+    let int active = 0;
+    for let i = 0; i < self.capacity; i++ do
+      if self.occupied.get(i) == 1 then
+        active = active + 1;
+      else
+        if self.occupied.get(i) != 0 then
+          return false;
+        fi
+        if self.previous.get(i) != -1 then
+          return false;
+        fi
+        if self.following.get(i) != -1 then
+          return false;
+        fi
+        // Removed nodes must not retain payload bytes.
+        if self.values.get(i) != 0 then
+          return false;
+        fi
+      fi
+    done
+    if active != self.length then
+      return false;
+    fi
+    let int current = self.head;
+    let int prior = -1;
+    for let inspected = 0; inspected < self.length; inspected++ do
+      if !self.contains(current) then
+        return false;
+      fi
+      if self.previous.get(current) != prior then
+        return false;
+      fi
+      prior = current;
+      current = self.following.get(current);
+    done
+    if current != -1 then
+      return false;
+    fi
+    if prior != self.tail then
+      return false;
+    fi
+    // Independently walk the reverse chain: detect broken back-links,
+    // orphaned active slots, and head/tail disagreement.
+    let int reverse_current = self.tail;
+    let int later = -1;
+    for let inspected = 0; inspected < self.length; inspected++ do
+      if !self.contains(reverse_current) then
+        return false;
+      fi
+      if self.following.get(reverse_current) != later then
+        return false;
+      fi
+      later = reverse_current;
+      reverse_current = self.previous.get(reverse_current);
+    done
+    if reverse_current != -1 then
+      return false;
+    fi
+    return later == self.head;
+  }
+end
