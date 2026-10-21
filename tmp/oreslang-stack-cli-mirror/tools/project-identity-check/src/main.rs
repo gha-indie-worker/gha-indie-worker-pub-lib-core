@@ -68,7 +68,8 @@ fn validate(
     );
     require(
         &mut errors,
-        !readme.contains("This PR must remain") && !readme.contains("Until this dependency is merged"),
+        !readme.contains("This PR must remain")
+            && !readme.contains("Until this dependency is merged"),
         "reject stale pull request claims",
     );
     require(
@@ -77,7 +78,10 @@ fn validate(
         "reject escaped newline breaking Markdown table",
     );
 
-    let table_rows: Vec<&str> = readme.lines().filter(|line| line.starts_with("| `")).collect();
+    let table_rows: Vec<&str> = readme
+        .lines()
+        .filter(|line| line.starts_with("| `"))
+        .collect();
     require(
         &mut errors,
         table_rows.len() >= 7 && table_rows.iter().all(|row| row.trim_end().ends_with('|')),
@@ -181,7 +185,9 @@ mod tests {
             false,
             false,
         );
-        assert!(errors.iter().any(|error| error.contains("stale pull request")));
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("stale pull request")));
     }
 
     #[test]
