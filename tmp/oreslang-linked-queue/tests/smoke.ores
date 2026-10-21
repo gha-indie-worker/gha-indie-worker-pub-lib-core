@@ -1,0 +1,141 @@
+// Native Oreslang behavioral smoke test. Run against Java/Truffle compiler.
+// LLVM must remain a documented unsupported gate until native Array lowering.
+import class IntLinkedQueue, QueueEntry from "../src/int_linked_queue";
+
+pub routine main() -> int {
+  val IntLinkedQueue q = new IntLinkedQueue(8);
+  if !q.initialize() then
+    return 1;
+  fi
+  if q.initialize() then
+    return 2;
+  fi
+  if !q.validate() then
+    return 3;
+  fi
+  if q.dequeue().is_some() then
+    return 4;
+  fi
+  if !q.enqueue(2, 20) then
+    return 5;
+  fi
+  if !q.enqueue(5, 50) then
+    return 6;
+  fi
+  if !q.add_to_front(0, 0) then
+    return 7;
+  fi
+  if !q.insert_before(5, 3, 30) then
+    return 8;
+  fi
+  if !q.insert_after(3, 4, 40) then
+    return 9;
+  fi
+  // Order: 0, 2, 3, 4, 5
+  if q.size() != 5 then
+    return 10;
+  fi
+  if !q.validate() then
+    return 11;
+  fi
+  if q.ordered_keys().get(0) != 0 then
+    return 12;
+  fi
+  if q.ordered_keys().get(1) != 2 then
+    return 13;
+  fi
+  if q.ordered_keys().get(2) != 3 then
+    return 14;
+  fi
+  if q.ordered_keys().get(3) != 4 then
+    return 15;
+  fi
+  if q.ordered_keys().get(4) != 5 then
+    return 16;
+  fi
+  if q.first().unwrap().value != 0 then
+    return 17;
+  fi
+  if q.last().unwrap().key != 5 then
+    return 18;
+  fi
+  // Every rejected operation must be a true no-op.
+  if q.enqueue(2, 999) then
+    return 19;
+  fi
+  if q.insert_after(6, 7, 70) then
+    return 20;
+  fi
+  if q.insert_before(2, 2, 22) then
+    return 21;
+  fi
+  if q.enqueue(-1, 123) then
+    return 22;
+  fi
+  if q.enqueue(8, 123) then
+    return 23;
+  fi
+  if q.size() != 5 then
+    return 24;
+  fi
+  if q.get(2).unwrap() != 20 then
+    return 25;
+  fi
+  if !q.validate() then
+    return 26;
+  fi
+  // Remove middle/head/tail, then reuse freed keys.
+  if q.remove(3).unwrap().value != 30 then
+    return 27;
+  fi
+  if q.dequeue().unwrap().key != 0 then
+    return 28;
+  fi
+  if q.remove_last().unwrap().key != 5 then
+    return 29;
+  fi
+  if !q.enqueue(3, 33) then
+    return 30;
+  fi
+  if q.get(3).unwrap() != 33 then
+    return 31;
+  fi
+  if q.get(0).is_some() then
+    return 32;
+  fi
+  if !q.validate() then
+    return 33;
+  fi
+  if q.size() != 3 then
+    return 34;
+  fi
+  q.clear();
+  if !q.is_empty() then
+    return 35;
+  fi
+  if q.first().is_some() then
+    return 36;
+  fi
+  if q.last().is_some() then
+    return 37;
+  fi
+  if q.get(3).is_some() then
+    return 38;
+  fi
+  if !q.validate() then
+    return 39;
+  fi
+  if !q.add_to_front(7, 70) then
+    return 40;
+  fi
+  if q.dequeue().unwrap().key != 7 then
+    return 41;
+  fi
+  if q.dequeue().is_some() then
+    return 42;
+  fi
+  if !q.validate() then
+    return 43;
+  fi
+  return 0;
+}
